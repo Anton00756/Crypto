@@ -4,18 +4,18 @@ from entities import ModeECB, ModeCBC, ModeCFB, ModeOFB, ModeCTR, ModeRD, ModeRD
 
 
 def swap_bits(bytes_arr, rule):
-    bits = []
-    for byte in bytes_arr:
-        bits.extend(format(byte, '08b'))
+    bits = [byte >> i & 1 for byte in bytes_arr for i in range(7, -1, -1)]
     result = []
     for byte in [rule[i:i + 8] for i in range(0, len(rule), 8)]:
-        result.append(int(''.join([bits[position - 1] for position in byte]), 2))
+        number = 0
+        for position in byte:
+            number = (number << 1) | bits[position - 1]
+        result.append(number)
     return result
 
 
 def change_S_block(byte, block):
-    bits = format(byte, '06b')
-    return block[int(bits[0] + bits[-1], 2)][int(bits[1:-1], 2)]
+    return block[(byte & 1) | (byte >> 5)][byte & 30 >> 1]
 
 
 class Extension(entities.KeyExtensionClass):
