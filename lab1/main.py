@@ -97,8 +97,9 @@ class FeistelNetwork(entities.SymmetricAlgorithm):
         return swap_bits(data_bytes, entities.REVERSED_P)
 
 
-class EncryptionAggregator:
-    def __init__(self, algorithm: entities.SymmetricAlgorithm, key: list, mode: str, init_vector=None):
+class EncryptionAggregator(entities.Aggregator):
+    def __init__(self, algorithm: entities.SymmetricAlgorithm, key: list, mode: entities.AggregatorMode,
+                 init_vector=None, *args):
         self.__algorithm = algorithm
         self.__algorithm.make_keys(key)
         self.__mode = mode
@@ -114,9 +115,9 @@ class EncryptionAggregator:
         with (open(in_file, 'rb') as f_in,
               open(out_file, 'wb') as f_out):
             count = 80000
-            if self.__mode == 'RD':
+            if self.__mode == entities.AggregatorMode.RD:
                 count += 1
-            elif self.__mode == 'RDH':
+            elif self.__mode == entities.AggregatorMode.RDH:
                 count += 2
             while block := f_in.read(count):
                 f_out.write(bytes(self.decrypt(list(block))))
@@ -127,34 +128,34 @@ class EncryptionAggregator:
             data.extend([count] * count)
         result = []
         match self.__mode:
-            case "ECB":
+            case entities.AggregatorMode.ECB:
                 with Pool(processes=cpu_count()) as pool:
                     result = [byte for res in [pool.apply_async(self.__algorithm.encrypt, (data[i: i + 8],))
                                                for i in range(0, len(data), 8)] for byte in res.get(timeout=1)]
-            case "CBC":
+            case entities.AggregatorMode.CBC:
                 previous_block = self.__init_vector
                 for i in range(0, len(data), 8):
                     previous_block = self.__algorithm.encrypt(list(f ^ s
                                                                    for f, s in zip(previous_block, data[i: i + 8])))
                     result.extend(previous_block)
-            case "CFB":
+            case entities.AggregatorMode.CFB:
                 previous_block = self.__init_vector
                 for i in range(0, len(data), 8):
                     previous_block = list(f ^ s for f, s in zip(self.__algorithm.encrypt(previous_block),
                                                                 data[i: i + 8]))
                     result.extend(previous_block)
-            case "OFB":
+            case entities.AggregatorMode.OFB:
                 previous_block = self.__init_vector
                 for i in range(0, len(data), 8):
                     previous_block = self.__algorithm.encrypt(previous_block)
                     result.extend(list(f ^ s for f, s in zip(previous_block, data[i: i + 8])))
-            case "CTR":
+            case entities.AggregatorMode.CTR:
                 with Pool(processes=cpu_count()) as pool:
                     for (index, block) in enumerate(pool.map(self.__algorithm.encrypt,
                                                              (list((i // 8 + 1).to_bytes(8, byteorder="big"))
                                                               for i in range(0, len(data), 8)))):
                         result.extend(list(f ^ s for f, s in zip(block, data[index * 8: index * 8 + 8])))
-            case "RD":
+            case entities.AggregatorMode.RD:
                 init_int = int.from_bytes(self.__init_vector, byteorder='big')
                 delta = int.from_bytes(self.__init_vector[len(self.__init_vector) // 2:], byteorder='big')
                 with Pool(processes=cpu_count()) as pool:
@@ -165,7 +166,7 @@ class EncryptionAggregator:
                                                data[i: i + 8]) for i in
                                               range(0, len(data), 8))]]):
                         result.extend(block)
-            case "RDH":
+            case entities.AggregatorMode.RDH:
                 init_int = int.from_bytes(self.__init_vector, byteorder='big')
                 delta = int.from_bytes(self.__init_vector[len(self.__init_vector) // 2:], byteorder='big')
                 with Pool(processes=cpu_count()) as pool:
@@ -182,33 +183,33 @@ class EncryptionAggregator:
     def decrypt(self, data: list):
         result = []
         match self.__mode:
-            case "ECB":
+            case entities.AggregatorMode.ECB:
                 with Pool(processes=cpu_count()) as pool:
                     result = [byte for res in [pool.apply_async(self.__algorithm.decrypt, (data[i: i + 8],))
                                                for i in range(0, len(data), 8)] for byte in res.get(timeout=1)]
-            case "CBC":
+            case entities.AggregatorMode.CBC:
                 previous_block = self.__init_vector
                 for i in range(0, len(data), 8):
                     result.extend(list(f ^ s for f, s in zip(previous_block, self.__algorithm.decrypt(data[i: i + 8]))))
                     previous_block = data[i: i + 8]
-            case "CFB":
+            case entities.AggregatorMode.CFB:
                 previous_block = self.__init_vector
                 for i in range(0, len(data), 8):
                     result.extend(list(f ^ s for f, s in zip(self.__algorithm.encrypt(previous_block),
                                                              data[i: i + 8])))
                     previous_block = data[i: i + 8]
-            case "OFB":
+            case entities.AggregatorMode.OFB:
                 previous_block = self.__init_vector
                 for i in range(0, len(data), 8):
                     previous_block = self.__algorithm.encrypt(previous_block)
                     result.extend(list(f ^ s for f, s in zip(previous_block, data[i: i + 8])))
-            case "CTR":
+            case entities.AggregatorMode.CTR:
                 with Pool(processes=cpu_count()) as pool:
                     for (index, block) in enumerate(pool.map(self.__algorithm.encrypt,
                                                              (list((i // 8 + 1).to_bytes(8, byteorder="big"))
                                                               for i in range(0, len(data), 8)))):
                         result.extend(list(f ^ s for f, s in zip(block, data[index * 8: index * 8 + 8])))
-            case "RD":
+            case entities.AggregatorMode.RD:
                 delta = int.from_bytes(self.__algorithm.decrypt(data[0:8])[4:], byteorder='big')
                 block_key = int.from_bytes(self.__algorithm.decrypt(data[0:8]), byteorder='big')
                 del data[0:8]
@@ -216,7 +217,7 @@ class EncryptionAggregator:
                     for block in pool.map(self.__algorithm.decrypt, [data[i: i + 8] for i in range(0, len(data), 8)]):
                         result.extend(f ^ s for f, s in zip(block, block_key.to_bytes(8, byteorder='big')))
                         block_key += delta
-            case "RDH":
+            case entities.AggregatorMode.RDH:
                 delta = int.from_bytes(self.__algorithm.decrypt(data[0:8])[4:], byteorder='big')
                 block_key = int.from_bytes(self.__algorithm.decrypt(data[0:8]), byteorder='big') + delta
                 hash_value = int.from_bytes(self.__algorithm.decrypt(data[8:16]), byteorder='big', signed=True)
@@ -259,7 +260,7 @@ if __name__ == '__main__':
 
     init_int = int.from_bytes(init_vector, byteorder='big')
     delta = int.from_bytes(init_vector[len(init_vector) // 2:], byteorder='big')
-    for mode in ["ECB", "CBC", "CFB", "OFB", "CTR", "RD", "RDH"]:
+    for mode in entities.AggregatorMode:
         try:
             encrypter = EncryptionAggregator(net, key, mode, init_vector)
             encrypt_result = encrypter.encrypt(list(bytes(string_to_encrypt, encoding='utf-8')))
@@ -267,7 +268,7 @@ if __name__ == '__main__':
         except ValueError as error:
             print(error)
     print()
-    for mode in ["ECB", "CBC", "CFB", "OFB", "CTR", "RD", "RDH"]:
+    for mode in entities.AggregatorMode:
         try:
             encrypter = EncryptionAggregator(net, key, mode, init_vector)
             encrypter.encrypt_file("lab1/images/img2.jpg", f"lab1/images/encrypted/{mode}.jpg")

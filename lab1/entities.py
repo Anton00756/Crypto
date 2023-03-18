@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import enum
 
 P = (58, 50, 42, 34, 26, 18, 10, 2, 60, 52, 44, 36, 28, 20, 12, 4,
      62, 54, 46, 38, 30, 22, 14, 6, 64, 56, 48, 40, 32, 24, 16, 8,
@@ -78,4 +79,36 @@ class SymmetricAlgorithm(ABC):
 
     @abstractmethod
     def make_keys(self, key):
+        pass
+
+
+class AggregatorMode(enum.Enum):
+    ECB = 0
+    CBC = 1
+    CFB = 2
+    OFB = 3
+    CTR = 4
+    RD = 5
+    RDH = 6
+
+
+class Aggregator:
+    @abstractmethod
+    def __init__(self, algorithm: SymmetricAlgorithm, key: list, mode: AggregatorMode, init_vector=None, *args):
+        pass
+
+    @abstractmethod
+    def encrypt_file(self, in_file: str, out_file: str):
+        pass
+
+    @abstractmethod
+    def decrypt_file(self, in_file: str, out_file: str):
+        pass
+
+    @abstractmethod
+    def encrypt(self, data: list):
+        pass
+
+    @abstractmethod
+    def decrypt(self, data: list):
         pass
