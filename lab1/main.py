@@ -20,7 +20,7 @@ def change_S_block(byte, block):
 
 class Extension(entities.KeyExtensionClass):
     @staticmethod
-    def expand(key):
+    def expand(key, **kwargs):
         bits = []
         for byte in key:
             bits.extend(format(byte, '08b'))
@@ -44,7 +44,7 @@ class Extension(entities.KeyExtensionClass):
 
 class Encryption(entities.EncryptionClass):
     @staticmethod
-    def encrypt(data, round_key):
+    def encrypt(data, round_key, **kwargs):
         bits = []
         for byte in data:
             bits.extend(format(byte, '08b'))
@@ -55,7 +55,7 @@ class Encryption(entities.EncryptionClass):
         return [(result[i] << 4) | result[i + 1] for i in range(0, len(result), 2)]
 
 
-class FeistelNetencrypt(entities.SymmetricAlgorithm):
+class FeistelNetEncryption(entities.SymmetricAlgorithm):
     def __init__(self, key_maker: entities.KeyExtensionClass, round_crypter: entities.EncryptionClass):
         self.__key_maker = key_maker
         self.__round_crypter = round_crypter
@@ -199,7 +199,7 @@ class EncryptionAggregator(entities.Aggregator):
 if __name__ == '__main__':
     bytes_array = [255, 1, 255, 3, 0, 100, 6, 255]
     key = [111, 222, 101, 202, 15, 57, 21]
-    net = FeistelNetencrypt(Extension(), Encryption())
+    net = FeistelNetEncryption(Extension(), Encryption())
     net.make_keys(key)
 
     print(f'Ключ шифрования: {key}\n')

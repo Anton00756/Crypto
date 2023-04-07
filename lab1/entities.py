@@ -59,14 +59,14 @@ REVERSED_P = (40, 8, 48, 16, 56, 24, 64, 32, 39, 7, 47, 15, 55, 23, 63, 31,
 class KeyExtensionClass(ABC):
     @staticmethod
     @abstractmethod
-    def expand(key):
+    def expand(key, **kwargs):
         pass
 
 
 class EncryptionClass(ABC):
     @staticmethod
     @abstractmethod
-    def encrypt(data, round_key):
+    def encrypt(data, round_key, **kwargs):
         pass
 
 
