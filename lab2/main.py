@@ -30,7 +30,7 @@ def sub_word(state, s_box):
 
 def generate_rcon(polynomial):
     result = [[1, 0, 0, 0]]
-    for i in range(11):
+    for i in range(29):
         new_value = result[-1].copy()
         new_value[0] = GaloisField.multiplication(new_value[0], 2, polynomial)
         result.append(new_value)
@@ -59,12 +59,89 @@ class Extension(entities.KeyExtensionClass):
 
 class Encryption(entities.EncryptionClass):
     @staticmethod
-    def encrypt(data, round_key, **kwargs):
+    def byte_sub(state, s_box):
+        for (index, element) in enumerate(state):
+            state[index] = sub_word(element, s_box)
+        return state
 
-        # ByteSub(State)
-        # ShiftRow(State)
-        # MixColumn(State) if True
-        # AddRoundKey(State, RoundKey)
+    @staticmethod
+    def shift_row(state):
+        if len(state) > 6:
+            state = [[state[(j + i + (1 if j > 1 else 0)) % len(state)][j] for j in range(4)]
+                     for i in range(len(state))]
+        else:
+            state = [[state[(j + i) % len(state)][j] for j in range(4)] for i in range(len(state))]
+        return state
+        # grid = [[state[i][j] for i in range(len(state))] for j in range(4)]
+        # for line in grid:
+        #     print(f'\t\t\t{line}')
+
+    @staticmethod
+    def mix_column(state, polynomial):
+        for (index, block) in enumerate(state):
+            state[index] = [GaloisField.sum(GaloisField.multiplication(2, block[0], polynomial),
+                                            GaloisField.multiplication(3, block[1], polynomial), block[2],block[3]),
+                            GaloisField.sum(GaloisField.multiplication(2, block[1], polynomial),
+                                            GaloisField.multiplication(3, block[2], polynomial), block[3],block[0]),
+                            GaloisField.sum(GaloisField.multiplication(2, block[2], polynomial),
+                                            GaloisField.multiplication(3, block[3], polynomial), block[0],block[1]),
+                            GaloisField.sum(GaloisField.multiplication(2, block[3], polynomial),
+                                            GaloisField.multiplication(3, block[0], polynomial), block[1],block[2])]
+        return state
+
+    @staticmethod
+    def add_round_key(state, round_key):
+        for (i, block) in enumerate(round_key):
+            for (j, element) in enumerate(block):
+                state[i][j] ^= element
+        return state
+
+    @staticmethod
+    def encrypt(data, round_key, **kwargs):
+        data = Encryption.byte_sub(data, kwargs['s_box'])
+        data = Encryption.shift_row(data)
+        if 'last' not in kwargs.keys() or 'last' in kwargs.keys() and not kwargs['last']:
+            data = Encryption.mix_column(data, kwargs['polynomial'])
+        data = Encryption.add_round_key(data, round_key)
+        return data
+
+    @staticmethod
+    def inv_shift_row(state):
+        if len(state) > 6:
+            state = [[state[(i - j - (1 if j > 1 else 0)) % len(state)][j] for j in range(4)] for i in
+                     range(len(state))]
+        else:
+            state = [[state[(i - j) % len(state)][j] for j in range(4)] for i in range(len(state))]
+        return state
+
+    @staticmethod
+    def inv_mix_column(state, polynomial):
+        for (index, block) in enumerate(state):
+            state[index] = [GaloisField.sum(GaloisField.multiplication(0xe, block[0], polynomial),
+                                            GaloisField.multiplication(0xb, block[1], polynomial),
+                                            GaloisField.multiplication(0xd, block[2], polynomial),
+                                            GaloisField.multiplication(0x9, block[3], polynomial)),
+                            GaloisField.sum(GaloisField.multiplication(0xe, block[1], polynomial),
+                                            GaloisField.multiplication(0xb, block[2], polynomial),
+                                            GaloisField.multiplication(0xd, block[3], polynomial),
+                                            GaloisField.multiplication(0x9, block[0], polynomial)),
+                            GaloisField.sum(GaloisField.multiplication(0xe, block[2], polynomial),
+                                            GaloisField.multiplication(0xb, block[3], polynomial),
+                                            GaloisField.multiplication(0xd, block[0], polynomial),
+                                            GaloisField.multiplication(0x9, block[1], polynomial)),
+                            GaloisField.sum(GaloisField.multiplication(0xe, block[3], polynomial),
+                                            GaloisField.multiplication(0xb, block[0], polynomial),
+                                            GaloisField.multiplication(0xd, block[1], polynomial),
+                                            GaloisField.multiplication(0x9, block[2], polynomial))]
+        return state
+
+    @staticmethod
+    def decrypt(data, round_key, **kwargs):
+        data = Encryption.inv_shift_row(data)
+        data = Encryption.byte_sub(data, kwargs['s_box'])
+        data = Encryption.add_round_key(data, round_key)
+        if 'last' not in kwargs.keys() or 'last' in kwargs.keys() and not kwargs['last']:
+            data = Encryption.inv_mix_column(data, kwargs['polynomial'])
         return data
 
 
@@ -109,42 +186,46 @@ class Rijndael(entities.SymmetricAlgorithm):
         if self.__round_keys is None:
             print('Отсутствуют раундовые ключи!')
             return
-        # data_bytes = swap_bits(data, entities.P)
-        # previous_left, previous_right = data_bytes[:len(data_bytes) // 2], data_bytes[len(data_bytes) // 2:]
-        # for round_key in self.__round_keys:
-        #     left = previous_right
-        #     right = previous_left
-        #     f_result = self.__round_crypter.encrypt(previous_right, round_key)
-        #     for (index, byte) in enumerate(f_result):
-        #         right[index] ^= byte
-        #     previous_left, previous_right = left, right
-        # data_bytes = previous_left + previous_right
-        # return swap_bits(data_bytes, entities.REVERSED_P)
+        if len(data) != self.__n_b * 4:
+            print('Некорректная длина блока!')
+            return
+        state = self.__round_crypter.add_round_key([[data[4 * i], data[4 * i + 1], data[4 * i + 2], data[4 * i + 3]]
+                                                  for i in range(self.__n_b)], self.__round_keys[:self.__n_b])
+        for i in range(1, self.__n_r):
+            state = self.__round_crypter.encrypt(state, self.__round_keys[i * self.__n_b:(i + 1) * self.__n_b],
+                                                 s_box=self.__s_box, polynomial=self.__polynomial)
+        state = self.__round_crypter.encrypt(state, self.__round_keys[self.__n_r * self.__n_b:], s_box=self.__s_box,
+                                             last=True, polynomial=self.__polynomial)
+        return [value for element in state for value in element]
 
     def decrypt(self, data):
         if self.__round_keys is None:
             print('Отсутствуют раундовые ключи!')
             return
-        # data_bytes = swap_bits(data, entities.P)
-        # previous_left, previous_right = data_bytes[:len(data_bytes) // 2], data_bytes[len(data_bytes) // 2:]
-        # for round_key in reversed(self.__round_keys):
-        #     right = previous_left
-        #     left = previous_right
-        #     f_result = self.__round_crypter.encrypt(previous_left, round_key)
-        #     for (index, byte) in enumerate(f_result):
-        #         left[index] ^= byte
-        #     previous_left, previous_right = left, right
-        # data_bytes = previous_left + previous_right
-        # return swap_bits(data_bytes, entities.REVERSED_P)
+        if len(data) != self.__n_b * 4:
+            print('Некорректная длина блока!')
+            return
+        state = self.__round_crypter.add_round_key([[data[4 * i], data[4 * i + 1], data[4 * i + 2], data[4 * i + 3]]
+                                                    for i in range(self.__n_b)],
+                                                   self.__round_keys[self.__n_r * self.__n_b:])
+        for i in range(self.__n_r - 1, 0, -1):
+            state = self.__round_crypter.decrypt(state, self.__round_keys[i * self.__n_b:(i + 1) * self.__n_b],
+                                                 s_box=self.__reversed_s_box, polynomial=self.__polynomial)
+        state = self.__round_crypter.decrypt(state, self.__round_keys[:self.__n_b], s_box=self.__reversed_s_box,
+                                             last=True, polynomial=self.__polynomial)
+        return [value for element in state for value in element]
 
 
 if __name__ == "__main__":
     key = [i for i in range(1, 17)]
-    data = [i for i in range(17, 33)]
+    data = [i for i in range(17, 41)]
     net = Rijndael(Extension(), Encryption())
+    net.set_length(block_length=192)
     net.make_keys(key)
-    print(net.encrypt(data))
-    # print(net.decrypt(net.encrypt(data)))
+    print(data)
+    result = net.encrypt(data)
+    print(result)
+    print(net.decrypt(result))
 
 
 

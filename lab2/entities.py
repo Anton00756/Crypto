@@ -34,8 +34,13 @@ class GaloisField:
         return set(i for i in range(1 << degree, 1 << (degree + 1)) if GaloisField.is_irreducible(i))
 
     @staticmethod
-    def sum(first, second):
-        return first ^ second
+    def sum(*args):
+        if len(args) == 1:
+            return args[0]
+        result = 0
+        for element in args:
+            result ^= element
+        return result
 
     @staticmethod
     def multiplication(first, second, module):
