@@ -1,5 +1,8 @@
+import random
+
+import lab2.entities
 from entities import GaloisField
-# from lab1.main import EncryptionAggregator
+from lab1.main import EncryptionAggregator
 import lab1.entities as entities
 
 
@@ -217,57 +220,35 @@ class Rijndael(entities.SymmetricAlgorithm):
 
 
 if __name__ == "__main__":
-    key = [i for i in range(1, 17)]
-    data = [i for i in range(17, 41)]
+    key = [random.randint(0, 255) for i in range(24)]
+    data = [random.randint(0, 255) for i in range(24)]
     net = Rijndael(Extension(), Encryption())
-    net.set_length(block_length=192)
+    net.set_length(block_length=192, key_length=192)
     net.make_keys(key)
-    print(data)
+    print(f'Data:\t\t{data}')
     result = net.encrypt(data)
-    print(result)
-    print(net.decrypt(result))
+    print('Encryption:', result)
+    print('Decryption:', net.decrypt(result))
 
-
-
-    # print(Extension.expand(key, len(data) // 4))
-
-    # bytes_array = [255, 1, 255, 3, 0, 100, 6, 255]
-    # key = [111, 222, 101, 202, 15, 57, 21]
-    # net = FeistelNetEncryption(Extension(), Encryption())
-    # net.make_keys(key)
-    #
-    # print(f'Ключ шифрования: {key}\n')
-    # print(f'Исходные байты: {bytes_array}')
-    # print(f'Шифрованные байты: {(result := net.encrypt(bytes_array))}')
-    # print(f'Дешифрованные байты: {net.decrypt(result)}')
-    #
-    # for i in range(len(bytes_array)):
-    #     bytes_array[i] = random.randint(0, 255)
-    # for i in range(len(key)):
-    #     key[i] = random.randint(0, 255)
-    # net.make_keys(key)
-    # print(f'\nКлюч шифрования: {key}\n')
-    # print(f'Исходные байты: {bytes_array}')
-    # print(f'Шифрованные байты: {(result := net.encrypt(bytes_array))}')
-    # print(f'Дешифрованные байты: {net.decrypt(result)}')
-    #
-    # init_vector = [random.randint(0, 255) for i in range(8)]
-    # string_to_encrypt = 'string check'
-    # print(f'\nСтрока для шифрования: "{string_to_encrypt}"\n')
-    #
-    # for mode in entities.AggregatorMode:
-    #     try:
-    #         encrypter = EncryptionAggregator(net, key, mode, init_vector)
-    #         encrypt_result = encrypter.encrypt(list(bytes(string_to_encrypt, encoding='utf-8')))
-    #         print(f"[{mode.name}] Результат дешифрования: {bytes(encrypter.decrypt(encrypt_result)).decode()}")
-    #     except ValueError as error:
-    #         print(error)
-    # print()
-    # for mode in entities.AggregatorMode:
-    #     try:
-    #         encrypter = EncryptionAggregator(net, key, mode, init_vector)
-    #         encrypter.encrypt_file("lab1/images/img2.jpg", f"lab1/images/encrypted/{mode.name}.jpg")
-    #         encrypter.decrypt_file(f"lab1/images/encrypted/{mode.name}.jpg", f"lab1/images/decrypted/{mode.name}.jpg")
-    #         print(f"{mode.name} отработал на файле")
-    #     except ValueError as error:
-    #         print(error)
+    string_to_encrypt = 'string check'
+    print(f'\nСтрока для шифрования: "{string_to_encrypt}"\n')
+    init_vector = [random.randint(0, 255) for i in range(len(data))]
+    for mode in entities.AggregatorMode:
+        try:
+            encrypter = EncryptionAggregator(net, key, mode, init_vector, block_size=len(data),
+                                             padding=lab2.entities.PaddingMode.ANSI_X923)
+            encrypt_result = encrypter.encrypt(list(bytes(string_to_encrypt, encoding='utf-8')))
+            print(f"[{mode.name}] Результат дешифрования: {bytes(encrypter.decrypt(encrypt_result)).decode()}")
+        except ValueError as error:
+            print(error)
+    print()
+    for mode in entities.AggregatorMode:
+        try:
+            encrypter = EncryptionAggregator(net, key, mode, init_vector, block_size=len(data),
+                                             padding=lab2.entities.PaddingMode.ISO10126)
+            encrypter.encrypt_file("../lab1/images/img.jpg", f"../lab1/images/encrypted/{mode.name}.jpg")
+            encrypter.decrypt_file(f"../lab1/images/encrypted/{mode.name}.jpg",
+                                   f"../lab1/images/decrypted/{mode.name}.jpg")
+            print(f"{mode.name} отработал на файле")
+        except ValueError as error:
+            print(error)

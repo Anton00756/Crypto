@@ -1,3 +1,6 @@
+import enum
+
+
 class GaloisField:
     class WrongPolynomialException(Exception):
         pass
@@ -89,3 +92,9 @@ class GaloisField:
             first ^= second << degree_difference
             first_degree = GaloisField.get_degree(first)
         return answer
+
+
+class PaddingMode(enum.Enum):
+    PKCS7 = 0
+    ISO10126 = 1
+    ANSI_X923 = 2
