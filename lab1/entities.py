@@ -3,6 +3,7 @@ import enum
 import math
 from multiprocessing import Pool, cpu_count
 
+
 P = (58, 50, 42, 34, 26, 18, 10, 2, 60, 52, 44, 36, 28, 20, 12, 4,
      62, 54, 46, 38, 30, 22, 14, 6, 64, 56, 48, 40, 32, 24, 16, 8,
      57, 49, 41, 33, 25, 17, 9, 1, 59, 51, 43, 35, 27, 19, 11, 3,
@@ -59,14 +60,14 @@ REVERSED_P = (40, 8, 48, 16, 56, 24, 64, 32, 39, 7, 47, 15, 55, 23, 63, 31,
 class KeyExtensionClass(ABC):
     @staticmethod
     @abstractmethod
-    def expand(key):
+    def expand(key, **kwargs):
         pass
 
 
 class EncryptionClass(ABC):
     @staticmethod
     @abstractmethod
-    def encrypt(data, round_key):
+    def encrypt(data, round_key, **kwargs):
         pass
 
 
@@ -96,7 +97,7 @@ class AggregatorMode(enum.Enum):
 
 class Aggregator:
     @abstractmethod
-    def __init__(self, algorithm: SymmetricAlgorithm, key: list, mode: AggregatorMode, init_vector=None, *args):
+    def __init__(self, algorithm: SymmetricAlgorithm, key: list, mode: AggregatorMode, init_vector=None, **kwargs):
         pass
 
     @abstractmethod
@@ -117,85 +118,94 @@ class Aggregator:
 
 
 class ModeECB:
-    def __init__(self, algorithm: SymmetricAlgorithm):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm):
+        self.__block_size = block_size
         self.__algorithm = algorithm
 
     def encrypt(self, data):
         with Pool(processes=cpu_count()) as pool:
             return [byte for block in pool.map(self.__algorithm.encrypt,
-                                               [data[i: i + 8] for i in range(0, len(data), 8)]) for byte in block]
+                                               [data[i: i + self.__block_size]
+                                                for i in range(0, len(data), self.__block_size)]) for byte in block]
 
     def decrypt(self, data):
         with Pool(processes=cpu_count()) as pool:
             return [byte for block in pool.map(self.__algorithm.decrypt,
-                                               [data[i: i + 8] for i in range(0, len(data), 8)]) for byte in block]
+                                               [data[i: i + self.__block_size]
+                                                for i in range(0, len(data), self.__block_size)]) for byte in block]
 
 
 class ModeCBC:
-    def __init__(self, algorithm: SymmetricAlgorithm, init):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm, init):
+        self.__block_size = block_size
         self.__algorithm = algorithm
         self.__previous_block = init
 
     def encrypt(self, data):
         result = []
-        for i in range(0, len(data), 8):
+        for i in range(0, len(data), self.__block_size):
             self.__previous_block = self.__algorithm.encrypt(list(f ^ s for f, s in
-                                                                  zip(self.__previous_block, data[i: i + 8])))
+                                                                  zip(self.__previous_block,
+                                                                      data[i: i + self.__block_size])))
             result.extend(self.__previous_block)
         return result
 
     def decrypt(self, data):
         result = []
-        for i in range(0, len(data), 8):
-            result.extend(list(f ^ s for f, s in zip(self.__previous_block, self.__algorithm.decrypt(data[i: i + 8]))))
-            self.__previous_block = data[i: i + 8]
+        for i in range(0, len(data), self.__block_size):
+            result.extend(list(f ^ s for f, s in zip(self.__previous_block,
+                                                     self.__algorithm.decrypt(data[i: i + self.__block_size]))))
+            self.__previous_block = data[i: i + self.__block_size]
         return result
 
 
 class ModeCFB:
-    def __init__(self, algorithm: SymmetricAlgorithm, init):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm, init):
+        self.__block_size = block_size
         self.__algorithm = algorithm
         self.__previous_block = init
 
     def encrypt(self, data):
         result = []
-        for i in range(0, len(data), 8):
+        for i in range(0, len(data), self.__block_size):
             self.__previous_block = list(f ^ s for f, s in zip(self.__algorithm.encrypt(self.__previous_block),
-                                                               data[i: i + 8]))
+                                                               data[i: i + self.__block_size]))
             result.extend(self.__previous_block)
         return result
 
     def decrypt(self, data):
         result = []
-        for i in range(0, len(data), 8):
+        for i in range(0, len(data), self.__block_size):
             result.extend(list(f ^ s for f, s in zip(self.__algorithm.encrypt(self.__previous_block),
-                                                     data[i: i + 8])))
-            self.__previous_block = data[i: i + 8]
+                                                     data[i: i + self.__block_size])))
+            self.__previous_block = data[i: i + self.__block_size]
         return result
 
 
 class ModeOFB:
-    def __init__(self, algorithm: SymmetricAlgorithm, init):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm, init):
+        self.__block_size = block_size
         self.__algorithm = algorithm
         self.__previous_block = init
 
     def encrypt(self, data):
         result = []
-        for i in range(0, len(data), 8):
+        for i in range(0, len(data), self.__block_size):
             self.__previous_block = self.__algorithm.encrypt(self.__previous_block)
-            result.extend(list(f ^ s for f, s in zip(self.__previous_block, data[i: i + 8])))
+            result.extend(list(f ^ s for f, s in zip(self.__previous_block, data[i: i + self.__block_size])))
         return result
 
     def decrypt(self, data):
         result = []
-        for i in range(0, len(data), 8):
+        for i in range(0, len(data), self.__block_size):
             self.__previous_block = self.__algorithm.encrypt(self.__previous_block)
-            result.extend(list(f ^ s for f, s in zip(self.__previous_block, data[i: i + 8])))
+            result.extend(list(f ^ s for f, s in zip(self.__previous_block, data[i: i + self.__block_size])))
         return result
 
 
 class ModeCTR:
-    def __init__(self, algorithm: SymmetricAlgorithm):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm):
+        self.__block_size = block_size
         self.__algorithm = algorithm
         self.__counter = 1
 
@@ -203,29 +213,32 @@ class ModeCTR:
         result = []
         with Pool(processes=cpu_count()) as pool:
             for (index, block) in enumerate(pool.map(self.__algorithm.encrypt,
-                                                     (list(i.to_bytes(8, byteorder="big"))
+                                                     (list(i.to_bytes(self.__block_size, byteorder="big"))
                                                       for i in range(self.__counter,
-                                                                     self.__counter + math.ceil(len(data) / 8))))):
-                pos = index * 8
-                result.extend(list(f ^ s for f, s in zip(block, data[pos: pos + 8])))
-        self.__counter += math.ceil(len(data) / 8)
+                                                                     self.__counter +
+                                                                     math.ceil(len(data) / self.__block_size))))):
+                pos = index * self.__block_size
+                result.extend(list(f ^ s for f, s in zip(block, data[pos: pos + self.__block_size])))
+        self.__counter += math.ceil(len(data) / self.__block_size)
         return result
 
     def decrypt(self, data):
         result = []
         with Pool(processes=cpu_count()) as pool:
             for (index, block) in enumerate(pool.map(self.__algorithm.encrypt,
-                                                     (list(i.to_bytes(8, byteorder="big"))
+                                                     (list(i.to_bytes(self.__block_size, byteorder="big"))
                                                       for i in range(self.__counter,
-                                                                     self.__counter + math.ceil(len(data) / 8))))):
-                pos = index * 8
-                result.extend(list(f ^ s for f, s in zip(block, data[pos: pos + 8])))
-        self.__counter += math.ceil(len(data) / 8)
+                                                                     self.__counter +
+                                                                     math.ceil(len(data) / self.__block_size))))):
+                pos = index * self.__block_size
+                result.extend(list(f ^ s for f, s in zip(block, data[pos: pos + self.__block_size])))
+        self.__counter += math.ceil(len(data) / self.__block_size)
         return result
 
 
 class ModeRD:
-    def __init__(self, algorithm: SymmetricAlgorithm, init=None):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm, init=None):
+        self.__block_size = block_size
         self.__algorithm = algorithm
         if init is not None:
             self.__init_vector = init
@@ -242,32 +255,36 @@ class ModeRD:
             self.__block_value = int.from_bytes(self.__init_vector, byteorder='big')
             blocks.append(self.__init_vector)
         blocks.extend([[a ^ b for a, b in zip(f, s)] for f, s in
-                       zip((i.to_bytes(8, byteorder='big')
+                       zip((i.to_bytes(self.__block_size, byteorder='big')
                             for i in range(self.__block_value,
-                                           self.__block_value + math.ceil(len(data) / 8) * self.__delta,
+                                           self.__block_value + math.ceil(len(data) / self.__block_size) * self.__delta,
                                            self.__delta)),
-                           (data[i: i + 8] for i in range(0, len(data), 8)))])
+                           (data[i: i + self.__block_size] for i in range(0, len(data), self.__block_size)))])
         with Pool(processes=cpu_count()) as pool:
             for block in pool.map(self.__algorithm.encrypt, blocks):
                 result.extend(block)
-        self.__block_value += math.ceil(len(data) / 8) * self.__delta
+        self.__block_value += math.ceil(len(data) / self.__block_size) * self.__delta
         return result
 
     def decrypt(self, data):
         result = []
         if self.__block_value is None:
-            self.__delta = int.from_bytes(self.__algorithm.decrypt(data[0:8])[4:], byteorder='big')
-            self.__block_value = int.from_bytes(self.__algorithm.decrypt(data[0:8]), byteorder='big')
-            del data[0:8]
+            self.__delta = int.from_bytes(self.__algorithm.decrypt(data[:self.__block_size])[self.__block_size // 2:],
+                                          byteorder='big')
+            self.__block_value = int.from_bytes(self.__algorithm.decrypt(data[:self.__block_size]), byteorder='big')
+            del data[:self.__block_size]
         with Pool(processes=cpu_count()) as pool:
-            for block in pool.map(self.__algorithm.decrypt, [data[i: i + 8] for i in range(0, len(data), 8)]):
-                result.extend(f ^ s for f, s in zip(block, self.__block_value.to_bytes(8, byteorder='big')))
+            for block in pool.map(self.__algorithm.decrypt, [data[i: i + self.__block_size]
+                                                             for i in range(0, len(data), self.__block_size)]):
+                result.extend(f ^ s for f, s in zip(block,
+                                                    self.__block_value.to_bytes(self.__block_size, byteorder='big')))
                 self.__block_value += self.__delta
         return result
 
 
 class ModeRDH:
-    def __init__(self, algorithm: SymmetricAlgorithm, init=None):
+    def __init__(self, block_size, algorithm: SymmetricAlgorithm, init=None):
+        self.__block_size = block_size
         self.__algorithm = algorithm
         if init is not None:
             self.__init_vector = init
@@ -283,30 +300,34 @@ class ModeRDH:
         if self.__block_value is None:
             self.__block_value = int.from_bytes(self.__init_vector, byteorder='big')
             blocks.append(self.__init_vector)
-            blocks.append(hash(tuple(data)).to_bytes(8, byteorder='big', signed=True))
+            blocks.append(hash(tuple(data)).to_bytes(self.__block_size, byteorder='big', signed=True))
         blocks.extend([[a ^ b for a, b in zip(f, s)] for f, s in
-                       zip((i.to_bytes(8, byteorder='big')
+                       zip((i.to_bytes(self.__block_size, byteorder='big')
                             for i in range(self.__block_value,
-                                           self.__block_value + math.ceil(len(data) / 8) * self.__delta,
+                                           self.__block_value + math.ceil(len(data) / self.__block_size) * self.__delta,
                                            self.__delta)),
-                           (data[i: i + 8] for i in range(0, len(data), 8)))])
+                           (data[i: i + self.__block_size] for i in range(0, len(data), self.__block_size)))])
         with Pool(processes=cpu_count()) as pool:
             for block in pool.map(self.__algorithm.encrypt, blocks):
                 result.extend(block)
-        self.__block_value += math.ceil(len(data) / 8) * self.__delta
+        self.__block_value += math.ceil(len(data) / self.__block_size) * self.__delta
         return result
 
     def decrypt(self, data):
         result = []
         hash_value = None
         if self.__block_value is None:
-            self.__delta = int.from_bytes(self.__algorithm.decrypt(data[0:8])[4:], byteorder='big')
-            self.__block_value = int.from_bytes(self.__algorithm.decrypt(data[0:8]), byteorder='big')
-            hash_value = int.from_bytes(self.__algorithm.decrypt(data[8:16]), byteorder='big', signed=True)
-            del data[0:16]
+            self.__delta = int.from_bytes(self.__algorithm.decrypt(data[:self.__block_size])[self.__block_size // 2:],
+                                          byteorder='big')
+            self.__block_value = int.from_bytes(self.__algorithm.decrypt(data[:self.__block_size]), byteorder='big')
+            hash_value = int.from_bytes(self.__algorithm.decrypt(data[self.__block_size:2 * self.__block_size]),
+                                        byteorder='big', signed=True)
+            del data[:2 * self.__block_size]
         with Pool(processes=cpu_count()) as pool:
-            for block in pool.map(self.__algorithm.decrypt, [data[i: i + 8] for i in range(0, len(data), 8)]):
-                result.extend(f ^ s for f, s in zip(block, self.__block_value.to_bytes(8, byteorder='big')))
+            for block in pool.map(self.__algorithm.decrypt, [data[i: i + self.__block_size]
+                                                             for i in range(0, len(data), self.__block_size)]):
+                result.extend(f ^ s for f, s in zip(block, self.__block_value.to_bytes(self.__block_size,
+                                                                                       byteorder='big')))
                 self.__block_value += self.__delta
         if hash_value is not None and hash_value != hash(tuple(result)):
             raise ValueError('[RDH] Подмена данных!')

@@ -1,6 +1,7 @@
 import random
-import entities
-from entities import ModeECB, ModeCBC, ModeCFB, ModeOFB, ModeCTR, ModeRD, ModeRDH
+import lab1.entities as entities
+from lab1.entities import ModeECB, ModeCBC, ModeCFB, ModeOFB, ModeCTR, ModeRD, ModeRDH
+from lab2.entities import PaddingMode
 
 
 def swap_bits(bytes_arr, rule):
@@ -20,7 +21,7 @@ def change_S_block(byte, block):
 
 class Extension(entities.KeyExtensionClass):
     @staticmethod
-    def expand(key):
+    def expand(key, **kwargs):
         bits = []
         for byte in key:
             bits.extend(format(byte, '08b'))
@@ -44,7 +45,7 @@ class Extension(entities.KeyExtensionClass):
 
 class Encryption(entities.EncryptionClass):
     @staticmethod
-    def encrypt(data, round_key):
+    def encrypt(data, round_key, **kwargs):
         bits = []
         for byte in data:
             bits.extend(format(byte, '08b'))
@@ -55,7 +56,7 @@ class Encryption(entities.EncryptionClass):
         return [(result[i] << 4) | result[i + 1] for i in range(0, len(result), 2)]
 
 
-class FeistelNetencrypt(entities.SymmetricAlgorithm):
+class FeistelNetEncryption(entities.SymmetricAlgorithm):
     def __init__(self, key_maker: entities.KeyExtensionClass, round_crypter: entities.EncryptionClass):
         self.__key_maker = key_maker
         self.__round_crypter = round_crypter
@@ -99,34 +100,44 @@ class FeistelNetencrypt(entities.SymmetricAlgorithm):
 
 class EncryptionAggregator(entities.Aggregator):
     def __init__(self, algorithm: entities.SymmetricAlgorithm, key: list, mode: entities.AggregatorMode,
-                 init_vector=None, *args):
+                 init_vector=None, **kwargs):
         self.__algorithm = algorithm
         self.__algorithm.make_keys(key)
         self.__mode = mode
         self.__init_vector = init_vector
+        self.__block_size = kwargs['block_size'] if 'block_size' in kwargs else 8
+        self.__padding = kwargs['padding'] if 'padding' in kwargs else PaddingMode.PKCS7
 
     def encrypt_file(self, in_file: str, out_file: str):
         with (open(in_file, 'rb') as f_in,
               open(out_file, 'wb') as f_out):
             match self.__mode:
                 case entities.AggregatorMode.ECB:
-                    mode_aggregator = ModeECB(self.__algorithm)
+                    mode_aggregator = ModeECB(self.__block_size, self.__algorithm)
                 case entities.AggregatorMode.CBC:
-                    mode_aggregator = ModeCBC(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeCBC(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.CFB:
-                    mode_aggregator = ModeCFB(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeCFB(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.OFB:
-                    mode_aggregator = ModeOFB(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeOFB(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.CTR:
-                    mode_aggregator = ModeCTR(self.__algorithm)
+                    mode_aggregator = ModeCTR(self.__block_size, self.__algorithm)
                 case entities.AggregatorMode.RD:
-                    mode_aggregator = ModeRD(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeRD(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.RDH:
-                    mode_aggregator = ModeRDH(self.__algorithm, self.__init_vector)
-            while block := f_in.read(80000):
-                if len(block) % 8:
-                    count = 8 - len(block) % 8
-                    f_out.write(bytes(mode_aggregator.encrypt(list(block) + [count] * count)))
+                    mode_aggregator = ModeRDH(self.__block_size, self.__algorithm, self.__init_vector)
+            while block := f_in.read(self.__block_size * 10000):
+                if len(block) % self.__block_size:
+                    count = self.__block_size - len(block) % self.__block_size
+                    match self.__padding:
+                        case PaddingMode.PKCS7:
+                            f_out.write(bytes(mode_aggregator.encrypt(list(block) + [count] * count)))
+                        case PaddingMode.ISO10126:
+                            f_out.write(bytes(mode_aggregator.encrypt(list(block) +
+                                                                      [random.randint(0, 255) for i in range(count - 1)]
+                                                                      + [count])))
+                        case PaddingMode.ANSI_X923:
+                            f_out.write(bytes(mode_aggregator.encrypt(list(block) + [0] * (count - 1) + [count])))
                 else:
                     f_out.write(bytes(mode_aggregator.encrypt(list(block))))
 
@@ -135,71 +146,94 @@ class EncryptionAggregator(entities.Aggregator):
               open(out_file, 'wb') as f_out):
             match self.__mode:
                 case entities.AggregatorMode.ECB:
-                    mode_aggregator = ModeECB(self.__algorithm)
+                    mode_aggregator = ModeECB(self.__block_size, self.__algorithm)
                 case entities.AggregatorMode.CBC:
-                    mode_aggregator = ModeCBC(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeCBC(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.CFB:
-                    mode_aggregator = ModeCFB(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeCFB(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.OFB:
-                    mode_aggregator = ModeOFB(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeOFB(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.CTR:
-                    mode_aggregator = ModeCTR(self.__algorithm)
+                    mode_aggregator = ModeCTR(self.__block_size, self.__algorithm)
                 case entities.AggregatorMode.RD:
-                    mode_aggregator = ModeRD(self.__algorithm, self.__init_vector)
+                    mode_aggregator = ModeRD(self.__block_size, self.__algorithm, self.__init_vector)
                 case entities.AggregatorMode.RDH:
-                    mode_aggregator = ModeRDH(self.__algorithm, self.__init_vector)
-            while block := f_in.read(80016 if self.__mode == entities.AggregatorMode.RDH else 80000):
+                    mode_aggregator = ModeRDH(self.__block_size, self.__algorithm, self.__init_vector)
+            while block := f_in.read(self.__block_size * 10002 if self.__mode == entities.AggregatorMode.RDH else
+                                     self.__block_size * 10000):
                 result = mode_aggregator.decrypt(list(block))
-                if result[-1] == result[-result[-1]:].count(result[-1]):
-                    del result[-result[-1]:]
+                match self.__padding:
+                    case PaddingMode.PKCS7:
+                        if result[-1] == result[-result[-1]:].count(result[-1]):
+                            del result[-result[-1]:]
+                    case PaddingMode.ISO10126:
+                        del result[-result[-1]:]
+                    case PaddingMode.ANSI_X923:
+                        if result[-1] == result[-result[-1]:].count(0) + 1:
+                            del result[-result[-1]:]
                 f_out.write(bytes(result))
 
     def encrypt(self, data: list):
-        if len(data) % 8:
-            count = 8 - len(data) % 8
-            data.extend([count] * count)
+        if len(data) % self.__block_size:
+            count = self.__block_size - len(data) % self.__block_size
+            match self.__padding:
+                case PaddingMode.PKCS7:
+                    data.extend([count] * count)
+                case PaddingMode.ISO10126:
+                    data.extend([random.randint(0, 255) for i in range(count - 1)])
+                    data.append(count)
+                case PaddingMode.ANSI_X923:
+                    data.extend([0] * (count - 1))
+                    data.append(count)
         match self.__mode:
             case entities.AggregatorMode.ECB:
-                return ModeECB(self.__algorithm).encrypt(data)
+                return ModeECB(self.__block_size, self.__algorithm).encrypt(data)
             case entities.AggregatorMode.CBC:
-                return ModeCBC(self.__algorithm, self.__init_vector).encrypt(data)
+                return ModeCBC(self.__block_size, self.__algorithm, self.__init_vector).encrypt(data)
             case entities.AggregatorMode.CFB:
-                return ModeCFB(self.__algorithm, self.__init_vector).encrypt(data)
+                return ModeCFB(self.__block_size, self.__algorithm, self.__init_vector).encrypt(data)
             case entities.AggregatorMode.OFB:
-                return ModeOFB(self.__algorithm, self.__init_vector).encrypt(data)
+                return ModeOFB(self.__block_size, self.__algorithm, self.__init_vector).encrypt(data)
             case entities.AggregatorMode.CTR:
-                return ModeCTR(self.__algorithm).encrypt(data)
+                return ModeCTR(self.__block_size, self.__algorithm).encrypt(data)
             case entities.AggregatorMode.RD:
-                return ModeRD(self.__algorithm, self.__init_vector).encrypt(data)
+                return ModeRD(self.__block_size, self.__algorithm, self.__init_vector).encrypt(data)
             case entities.AggregatorMode.RDH:
-                return ModeRDH(self.__algorithm, self.__init_vector).encrypt(data)
+                return ModeRDH(self.__block_size, self.__algorithm, self.__init_vector).encrypt(data)
 
     def decrypt(self, data: list):
         result = []
         match self.__mode:
             case entities.AggregatorMode.ECB:
-                result = ModeECB(self.__algorithm).decrypt(data)
+                result = ModeECB(self.__block_size, self.__algorithm).decrypt(data)
             case entities.AggregatorMode.CBC:
-                result = ModeCBC(self.__algorithm, self.__init_vector).decrypt(data)
+                result = ModeCBC(self.__block_size, self.__algorithm, self.__init_vector).decrypt(data)
             case entities.AggregatorMode.CFB:
-                result = ModeCFB(self.__algorithm, self.__init_vector).decrypt(data)
+                result = ModeCFB(self.__block_size, self.__algorithm, self.__init_vector).decrypt(data)
             case entities.AggregatorMode.OFB:
-                result = ModeOFB(self.__algorithm, self.__init_vector).decrypt(data)
+                result = ModeOFB(self.__block_size, self.__algorithm, self.__init_vector).decrypt(data)
             case entities.AggregatorMode.CTR:
-                result = ModeCTR(self.__algorithm).decrypt(data)
+                result = ModeCTR(self.__block_size, self.__algorithm).decrypt(data)
             case entities.AggregatorMode.RD:
-                result = ModeRD(self.__algorithm).decrypt(data)
+                result = ModeRD(self.__block_size, self.__algorithm).decrypt(data)
             case entities.AggregatorMode.RDH:
-                result = ModeRDH(self.__algorithm).decrypt(data)
-        if result[-1] == result[-result[-1]:].count(result[-1]):
-            del result[-result[-1]:]
+                result = ModeRDH(self.__block_size, self.__algorithm).decrypt(data)
+        match self.__padding:
+            case PaddingMode.PKCS7:
+                if result[-1] == result[-result[-1]:].count(result[-1]):
+                    del result[-result[-1]:]
+            case PaddingMode.ISO10126:
+                del result[-result[-1]:]
+            case PaddingMode.ANSI_X923:
+                if result[-1] == result[-result[-1]:].count(0) + 1:
+                    del result[-result[-1]:]
         return result
 
 
 if __name__ == '__main__':
     bytes_array = [255, 1, 255, 3, 0, 100, 6, 255]
     key = [111, 222, 101, 202, 15, 57, 21]
-    net = FeistelNetencrypt(Extension(), Encryption())
+    net = FeistelNetEncryption(Extension(), Encryption())
     net.make_keys(key)
 
     print(f'Ключ шифрования: {key}\n')
@@ -232,8 +266,8 @@ if __name__ == '__main__':
     for mode in entities.AggregatorMode:
         try:
             encrypter = EncryptionAggregator(net, key, mode, init_vector)
-            encrypter.encrypt_file("lab1/images/img2.jpg", f"lab1/images/encrypted/{mode.name}.jpg")
-            encrypter.decrypt_file(f"lab1/images/encrypted/{mode.name}.jpg", f"lab1/images/decrypted/{mode.name}.jpg")
+            encrypter.encrypt_file("images/img2.jpg", f"images/encrypted/{mode.name}.jpg")
+            encrypter.decrypt_file(f"images/encrypted/{mode.name}.jpg", f"images/decrypted/{mode.name}.jpg")
             print(f"{mode.name} отработал на файле")
         except ValueError as error:
             print(error)
