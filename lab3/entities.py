@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 
 
 class SimplicityTest(ABC):
@@ -7,3 +8,7 @@ class SimplicityTest(ABC):
         pass
 
 
+class TestMode(Enum):
+    FERMAT = 0
+    SOLOVEY_STRASSEN = 1
+    MILLER_RABIN = 2
