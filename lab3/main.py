@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Tuple
+from typing import Tuple, List
 import lab3.entities as entities
 import gmpy2
 
@@ -181,6 +181,51 @@ class RSA:
     def decrypt(self, message: int) -> int:
         return pow(message, self.__private_key, self.__n)
 
+    def get_public_key(self) -> Tuple[int, int]:
+        return self.__public_key, self.__n
+
+
+class WienerAttack:
+    @staticmethod
+    def attack(e: int, n: int) -> Tuple[int, List[Tuple[int, int]]]:
+        result = []
+        message = random.getrandbits(8)
+        c = pow(message, e, n)
+        limit_d = int(gmpy2.mpz(n) ** 0.25 / 3)
+        quotients = WienerAttack.fraction(e, n)
+        for i in range(1, len(quotients), 2):
+            if quotients[i] > limit_d:
+                break
+            m = pow(c, quotients[i], n)
+            result.append((quotients[i - 1], quotients[i]))
+            if m == message:
+                return quotients[i], result
+        return 0, result
+
+    @staticmethod
+    def fraction(first: int, second: int) -> List[int]:
+        quotients = []
+        a = first // second
+
+        quotients.append(a)
+        while a * second != first:
+            first, second = second, first - a * second
+            a = first // second
+            quotients.append(a)
+        previous_p = 1
+        previous_q = 0
+        p = quotients[0]
+        q = 1
+        result = [p, q]
+        for element in quotients[1:]:
+            p = element * p + previous_p
+            q = element * q + previous_q
+            previous_p = result[-2]
+            previous_q = result[-1]
+            result.append(p)
+            result.append(q)
+        return result
+
 
 if __name__ == "__main__":
     engine = RSA(entities.TestMode.FERMAT, 0.9, 1024)
@@ -188,3 +233,6 @@ if __name__ == "__main__":
     print(f'Исходное сообщение: {(input_message := 1234567000891234567891128371239812731982371823917231283712983713)}')
     print(f'Шифровка: \t\t\t{(result := engine.encrypt(input_message))}')
     print(f'Дешифровка: \t\t{engine.decrypt(result)}')
+
+    print(f'Открытая пара: {(public_key := engine.get_public_key())}')
+    print(f'Результат атаки Винера: {WienerAttack.attack(*public_key)}')
