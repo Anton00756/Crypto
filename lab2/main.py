@@ -177,9 +177,12 @@ class Rijndael(entities.SymmetricAlgorithm):
 
     def set_polynomial(self, polynomial=283):
         if self.__polynomial != polynomial:
-            self.__polynomial = polynomial
-            self.__s_box, self.__reversed_s_box = generate_boxes(self.__polynomial)
-            self.__round_keys = None
+            if GaloisField.is_irreducible(polynomial):
+                self.__polynomial = polynomial
+                self.__s_box, self.__reversed_s_box = generate_boxes(self.__polynomial)
+                self.__round_keys = None
+            else:
+                print('Полином является приводимым!')
 
     def make_keys(self, key):
         self.__round_keys = self.__key_maker.expand(key, s_box=self.__s_box, n_b=self.__n_b, n_k=self.__n_k,
