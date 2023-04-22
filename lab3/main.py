@@ -34,7 +34,7 @@ class JacobiSymbol:
             raise Exception("Знаменатель является чётным числом!")
         if first == 1:
             return 1
-        value = 1 if not ((second - 1) >> 1 & 1) else -1
+        value = 1 if not (second >> 1 & 1) else -1
         if first < 0:
             return self.calculate(-first, second) * value
         value = 1 if not ((second * second - 1) >> 3 & 1) else -1
@@ -48,11 +48,18 @@ class FermatTest(entities.SimplicityTest):
     def check(self, number: int, probability: float) -> bool:
         if number < 2:
             raise Exception("Число должно быть больше 1!")
-        if not number % 2:
+        if number == 2:
             return True
-        for i in range(3, min(3 + math.ceil(-math.log2(1 - probability)), number)):
-            if math.gcd(i, number) != 1 or pow(i, number - 1, number) != 1:
+        random_set = set()
+        for i in range(math.ceil(-math.log2(1 - probability))):
+            random_value = random.randint(2, number - 1)
+            while random_value in random_set:
+                random_value = random.randint(2, number - 1)
+            if math.gcd(random_value, number) != 1 or pow(random_value, number - 1, number) != 1:
                 return False
+            random_set.add(random_value)
+            if len(random_set) == number - 2:
+                return True
         return True
 
 
@@ -60,12 +67,20 @@ class SoloveyStrassenTest(entities.SimplicityTest):
     def check(self, number: int, probability: float) -> bool:
         if number < 2:
             raise Exception("Число должно быть больше 1!")
-        if not number % 2:
+        if number == 2:
             return True
         jacobi_object = JacobiSymbol()
-        for i in range(3, min(3 + math.ceil(-math.log2(1 - probability)), number)):
-            if math.gcd(i, number) != 1 or pow(i, number >> 1, number) != jacobi_object.calculate(i, number):
+        random_set = set()
+        for i in range(math.ceil(-math.log2(1 - probability))):
+            random_value = random.randint(2, number - 1)
+            while random_value in random_set:
+                random_value = random.randint(2, number - 1)
+            if math.gcd(random_value, number) != 1 or pow(random_value, number >> 1, number) != \
+                    jacobi_object.calculate(random_value, number):
                 return False
+            random_set.add(random_value)
+            if len(random_set) == number - 2:
+                return True
         return True
 
 
@@ -73,7 +88,7 @@ class MillerRabinTest(entities.SimplicityTest):
     def check(self, number: int, probability: float) -> bool:
         if number < 2:
             raise Exception("Число должно быть больше 1!")
-        if not number % 2:
+        if number == 2:
             return True
         t = number - 1
         difference = 0
@@ -81,8 +96,15 @@ class MillerRabinTest(entities.SimplicityTest):
             difference += 1
             t >>= 1
         out = False
-        for i in range(2, min(2 + math.ceil(-math.log(1 - probability, 4)), number)):
-            x = pow(i, t, number)
+        random_set = set()
+        for i in range(math.ceil(-math.log(1 - probability, 4))):
+            if len(random_set) == number - 2:
+                return True
+            random_value = random.randint(2, number - 1)
+            while random_value in random_set:
+                random_value = random.randint(2, number - 1)
+            x = pow(random_value, t, number)
+            random_set.add(random_value)
             if x == 1 or x == number - 1:
                 continue
             for j in range(difference - 1):
@@ -136,8 +158,8 @@ class RSA:
         def get_number(self) -> int:
             while True:
                 number = random.getrandbits(self.__bit_length)
-                if not number % 2:
-                    number += 1
+                if not number & 1:
+                    number ^= 1
                 if number > 3 and self.__test.check(number, self.__probability):
                     return number
 
@@ -228,7 +250,17 @@ class WienerAttack:
 
 
 if __name__ == "__main__":
-    engine = RSA(entities.TestMode.FERMAT, 0.9, 1024)
+    engine = RSA(entities.TestMode.SOLOVEY_STRASSEN, 0.9, 256)
+
+    print(f'Исходное сообщение: {(input_message := 1234567000891234567891128371239812731982371823917231283712983713)}')
+    print(f'Шифровка: \t\t\t{(result := engine.encrypt(input_message))}')
+    print(f'Дешифровка: \t\t{engine.decrypt(result)}')
+
+    print(f'Открытая пара: {(public_key := engine.get_public_key())}')
+    print(f'Результат атаки Винера: {WienerAttack.attack(*public_key)}')
+    print()
+
+    engine = RSA(entities.TestMode.MILLER_RABIN, 0.9, 1024)
 
     print(f'Исходное сообщение: {(input_message := 1234567000891234567891128371239812731982371823917231283712983713)}')
     print(f'Шифровка: \t\t\t{(result := engine.encrypt(input_message))}')
